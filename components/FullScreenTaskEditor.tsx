@@ -1,3 +1,4 @@
+import { useFolder } from '@/context/FolderContext';
 import { useTask } from '@/context/TaskContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
@@ -14,13 +15,18 @@ import {
   View
 } from 'react-native';
 import Flag2Icon from './Flag2Icon';
+import PriorityDropdown from './PriorityDropdown';
 
 interface FullScreenTaskEditorProps {
   visible: boolean;
   onClose: () => void;
   initialTitle?: string;
   initialDescription?: string;
+  initialPriority?: string;
+  currentFolder?: string;
+  taskId?: string;
   onSave: (title: string, description: string) => void;
+  onFolderChange?: (newFolder: string) => void;
 }
 
 export default function FullScreenTaskEditor({ 
@@ -28,7 +34,11 @@ export default function FullScreenTaskEditor({
   onClose, 
   initialTitle = '', 
   initialDescription = '',
-  onSave 
+  initialPriority = 'none',
+  currentFolder = 'inbox',
+  taskId,
+  onSave,
+  onFolderChange
 }: FullScreenTaskEditorProps) {
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
@@ -36,35 +46,66 @@ export default function FullScreenTaskEditor({
   const [focusedInputRef, setFocusedInputRef] = useState<any>(null);
   const checkItemRefs = useState<any[]>([])[0];
   const [showFolderDropdown, setShowFolderDropdown] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState('Inbox');
-  const { addTask } = useTask();
+  const [selectedFolder, setSelectedFolder] = useState(currentFolder);
+  const [currentFolderContext, setCurrentFolderContext] = useState(currentFolder);
+  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [selectedPriority, setSelectedPriority] = useState(initialPriority);
+  const { addTask, updateTask } = useTask();
+  const { folders } = useFolder();
 
-  // Mock folder data - in a real app this would come from context/storage
-  const folders = [
-    { id: 'inbox', name: 'Inbox', icon: 'inbox' },
-    { id: 'work', name: 'Work', icon: 'work' },
-    { id: 'personal', name: 'Personal', icon: 'person' },
-    { id: 'shopping', name: 'Shopping', icon: 'shopping-cart' },
+  // Priority options
+  const priorities = [
+    { id: 'high', label: 'High Priority', color: '#FF4444' },
+    { id: 'medium', label: 'Medium Priority', color: '#FFA500' },
+    { id: 'low', label: 'Low Priority', color: '#4772fa' },
+    { id: 'none', label: 'No Priority', color: '#aaaaaa' },
   ];
+
+  const getPriorityColor = () => {
+    const priority = priorities.find(p => p.id === selectedPriority);
+    return priority ? priority.color : '#aaaaaa';
+  };
+
+  // Get current folder display name
+  const getCurrentFolderName = () => {
+    const folder = folders.find(f => f.id === currentFolderContext);
+    return folder ? folder.name : 'Inbox';
+  };
 
   useEffect(() => {
     setTitle(initialTitle);
     setDescription(initialDescription);
-  }, [initialTitle, initialDescription]);
+    setSelectedPriority(initialPriority);
+    setSelectedFolder(currentFolder);
+    setCurrentFolderContext(currentFolder);
+  }, [initialTitle, initialDescription, initialPriority, currentFolder]);
 
   const handleClose = () => {
     // Save content directly to TaskContext if there's any content
     if (title.trim() || checkItems.some(item => item.trim())) {
-      // If there's a title and no checkboxes, create a task from the title
-      if (checkItems.length === 0 && title.trim()) {
-        addTask(title.trim(), description.trim(), new Date());
+      if (taskId) {
+        // Update existing task
+        if (title.trim()) {
+          updateTask(taskId, {
+            title: title.trim(),
+            description: description.trim(),
+            priority: selectedPriority,
+            folder: selectedFolder
+          });
+        }
       } else {
-        // Save checkboxes as individual tasks
-        checkItems.forEach(item => {
-          if (item.trim()) {
-            addTask(item.trim(), description.trim(), new Date());
-          }
-        });
+        // Create new task(s)
+        // If there's a title and no checkboxes, create a task from the title
+        if (checkItems.length === 0 && title.trim()) {
+          addTask(title.trim(), description.trim(), new Date(), selectedPriority, selectedFolder);
+        } else {
+          // Save checkboxes as individual tasks
+          checkItems.forEach(item => {
+            if (item.trim()) {
+              addTask(item.trim(), description.trim(), new Date(), selectedPriority, selectedFolder);
+            }
+          });
+        }
       }
     }
     
@@ -72,6 +113,8 @@ export default function FullScreenTaskEditor({
     setTitle('');
     setDescription('');
     setCheckItems([]);
+    setSelectedPriority('none');
+    setShowPriorityDropdown(false);
     
     // Close modal
     onClose();
@@ -120,7 +163,7 @@ export default function FullScreenTaskEditor({
               <MaterialIcons name="arrow-back" size={24} color="#333333" />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle}>{selectedFolder}</Text>
+              <Text style={styles.headerTitle}>{getCurrentFolderName()}</Text>
               <TouchableOpacity 
                 style={styles.expandButton}
                 onPress={() => setShowFolderDropdown(!showFolderDropdown)}
@@ -145,21 +188,32 @@ export default function FullScreenTaskEditor({
                   key={folder.id}
                   style={[
                     styles.folderItem,
-                    selectedFolder === folder.name && styles.selectedFolderItem
+                    selectedFolder === folder.id && styles.selectedFolderItem
                   ]}
                   onPress={() => {
-                    setSelectedFolder(folder.name);
+                    setSelectedFolder(folder.id);
+                    setCurrentFolderContext(folder.id);
                     setShowFolderDropdown(false);
+                    
+                    // If editing an existing task, move it to the new folder immediately
+                    if (taskId) {
+                      updateTask(taskId, { folder: folder.id });
+                    }
+
+                    // Call the onFolderChange callback if it exists
+                    if (onFolderChange) {
+                      onFolderChange(folder.id);
+                    }
                   }}
                 >
                                      <MaterialIcons 
                      name={folder.icon as any} 
                      size={20} 
-                     color={selectedFolder === folder.name ? "#4772fa" : "#666666"} 
+                     color={selectedFolder === folder.id ? "#4772fa" : "#666666"} 
                    />
                   <Text style={[
                     styles.folderItemText,
-                    selectedFolder === folder.name && styles.selectedFolderItemText
+                    selectedFolder === folder.id && styles.selectedFolderItemText
                   ]}>
                     {folder.name}
                   </Text>
@@ -168,16 +222,19 @@ export default function FullScreenTaskEditor({
             </View>
           )}
 
-          {/* Date & Repeat Section */}
+          {/* Icon Section */}
           <View style={styles.dateRepeatSection}>
             <View style={styles.leftIconsSection}>
               <TouchableOpacity style={styles.iconButton}>
-                <MaterialIcons name="check-box-outline-blank" size={22} color="#aaaaaa" />
+                <MaterialIcons name="check-box-outline-blank" size={22} color={getPriorityColor()} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.dateRepeatText}>Date & Repeat</Text>
-            <TouchableOpacity style={styles.iconButton}>
-              <Flag2Icon size={22} color="#aaaaaa" />
+            <View style={styles.spacer} />
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => setShowPriorityDropdown(!showPriorityDropdown)}
+            >
+              <Flag2Icon size={22} color={getPriorityColor()} filled={selectedPriority !== 'none'} />
             </TouchableOpacity>
           </View>
 
@@ -208,10 +265,10 @@ export default function FullScreenTaskEditor({
 
             {/* Check Items */}
             {checkItems.map((item, index) => (
-              <View key={index} style={styles.checkItemContainer}>
-                <TouchableOpacity style={styles.checkbox}>
-                  <MaterialIcons name="check-box-outline-blank" size={20} color="#cccccc" />
-                </TouchableOpacity>
+                              <View key={index} style={styles.checkItemContainer}>
+                  <TouchableOpacity style={styles.checkbox}>
+                    <MaterialIcons name="check-box-outline-blank" size={20} color={getPriorityColor()} />
+                  </TouchableOpacity>
                 <TextInput
                   ref={(ref) => { checkItemRefs[index] = ref; }}
                   style={styles.checkItemInput}
@@ -247,6 +304,17 @@ export default function FullScreenTaskEditor({
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Priority Dropdown Overlay */}
+        <PriorityDropdown
+          visible={showPriorityDropdown}
+          selectedPriority={selectedPriority}
+          priorities={priorities}
+          onSelectPriority={setSelectedPriority}
+          onClose={() => setShowPriorityDropdown(false)}
+          style="positioned"
+          showCheckIcon={true}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -262,7 +330,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 6,
     backgroundColor: '#FFFFFF',
   },
   backButton: {
@@ -281,7 +349,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 6,
     backgroundColor: '#FFFFFF',
   },
   leftIconsSection: {
@@ -290,16 +358,14 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: 8,
   },
-  dateRepeatText: {
-    fontSize: 16,
-    color: '#cccccc',
-    fontWeight: '400',
+  spacer: {
+    flex: 1,
   },
   content: {
     flex: 1,
     paddingLeft: 28,
     paddingRight: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     backgroundColor: '#FFFFFF',
   },
   titleInput: {

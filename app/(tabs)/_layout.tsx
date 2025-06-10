@@ -29,29 +29,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="calendar"
-        options={{
-          title: 'Calendar',
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="calendar-today" size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="matrix"
         options={{
           title: 'Matrix',
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="dashboard" size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="habits"
-        options={{
-          title: 'Habits',
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="schedule" size={26} color={color} />
           ),
         }}
       />

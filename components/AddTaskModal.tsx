@@ -8,27 +8,89 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
-import CalendarIcon from './CalendarIcon';
+import { useFolder } from '../context/FolderContext';
 import Flag2Icon from './Flag2Icon';
+import FolderDropdown from './FolderDropdown';
 import FullScreenTaskEditor from './FullScreenTaskEditor';
 import PanZoomIcon from './PanZoomIcon';
+import PriorityDropdown from './PriorityDropdown';
 
 interface AddTaskModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (title: string, description: string) => void;
+  currentFolder?: string;
+  onSave: (title: string, description: string, priority?: string, folder?: string) => void;
 }
 
-export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalProps) {
+/**
+ * Modal component for adding new tasks with priority, folder selection, and optional full-screen editing
+ */
+export default function AddTaskModal({ visible, onClose, currentFolder = 'inbox', onSave }: AddTaskModalProps) {
+  const { folders } = useFolder();
+  
+  // Task content state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [showDateRepeat, setShowDateRepeat] = useState(false);
-  const [slideAnim] = useState(new Animated.Value(0));
+  
+  // UI state management
+  const [showDateRepeat, setShowDateRepeat] = useState(false); // Controls full-screen editor
+  const [slideAnim] = useState(new Animated.Value(0)); // Bottom sheet slide animation
+  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
+  
+  // Selection state
+  const [selectedPriority, setSelectedPriority] = useState('none');
+  const [selectedFolder, setSelectedFolder] = useState(currentFolder);
+  
+  // Notification state for folder changes
+  const [showMoveNotification, setShowMoveNotification] = useState(false);
+  const [movedToFolder, setMovedToFolder] = useState<string>('');
 
+  // Priority configuration
+  const priorities = [
+    { id: 'high', label: 'High Priority', color: '#FF4444' },
+    { id: 'medium', label: 'Medium Priority', color: '#FFA500' },
+    { id: 'low', label: 'Low Priority', color: '#4772fa' },
+    { id: 'none', label: 'No Priority', color: '#aaaaaa' },
+  ];
+
+  /**
+   * Get the color for the currently selected priority
+   */
+  const getPriorityColor = () => {
+    const priority = priorities.find(p => p.id === selectedPriority);
+    return priority ? priority.color : '#aaaaaa';
+  };
+
+  /**
+   * Handle folder selection and show notification if folder changed
+   */
+  const handleFolderSelection = (folderId: string) => {
+    setSelectedFolder(folderId);
+    
+    // Show notification if folder changed from current folder
+    if (folderId !== currentFolder) {
+      const folderData = folders.find(f => f.id === folderId);
+      if (folderData) {
+        setMovedToFolder(folderData.name);
+        setShowMoveNotification(true);
+        
+        // Hide notification after 3 seconds
+        setTimeout(() => {
+          setShowMoveNotification(false);
+        }, 3000);
+      }
+    }
+  };
+
+  /**
+   * Handle modal open/close state changes and animations
+   */
   useEffect(() => {
     if (visible) {
       // Slide up animation when modal opens
@@ -38,24 +100,37 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
         tension: 65,
         friction: 11,
       }).start();
+      // Reset folder selection to current folder when opening
+      setSelectedFolder(currentFolder);
     } else {
       // Reset animation and all states when modal closes
       slideAnim.setValue(0);
       setShowDateRepeat(false);
+      setShowPriorityDropdown(false);
+      setShowFolderDropdown(false);
+      setSelectedPriority('none');
+      setSelectedFolder(currentFolder);
       setTitle('');
       setDescription('');
+      setShowMoveNotification(false);
     }
-  }, [visible]);
+  }, [visible, currentFolder]);
 
+  /**
+   * Save the task if title is provided
+   */
   const handleSave = () => {
     if (title.trim()) {
-      onSave(title.trim(), description.trim());
+      onSave(title.trim(), description.trim(), selectedPriority, selectedFolder);
       setTitle('');
       setDescription('');
       onClose();
     }
   };
 
+  /**
+   * Handle modal close with slide down animation and auto-save
+   */
   const handleClose = () => {
     // Slide down animation before closing
     Animated.timing(slideAnim, {
@@ -65,14 +140,17 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
     }).start(() => {
       // Auto-save if there's content
       if (title.trim()) {
-        onSave(title.trim(), description.trim());
+        onSave(title.trim(), description.trim(), selectedPriority, selectedFolder);
       }
+      setShowPriorityDropdown(false);
+      setSelectedPriority('none');
       setTitle('');
       setDescription('');
       onClose();
     });
   };
 
+  // Animation interpolation for slide effect
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [500, 0], // Start 500px below, slide to 0
@@ -85,7 +163,7 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
       transparent={true}
       key={visible ? 'modal-open' : 'modal-closed'}
     >
-      {/* Dark overlay */}
+      {/* Dark overlay background */}
       <TouchableOpacity 
         style={styles.overlay} 
         activeOpacity={1} 
@@ -99,9 +177,8 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               >
                 <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-                  {/* Content */}
                   <View style={styles.content}>
-                    {/* Task Title Input */}
+                    {/* Task title input */}
                     <TextInput
                       style={styles.titleInput}
                       placeholder="Make figma design for project"
@@ -115,7 +192,7 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
                       autoComplete="off"
                     />
 
-                    {/* Description Input */}
+                    {/* Task description input */}
                     <TextInput
                       style={styles.descriptionInput}
                       placeholder="Description"
@@ -128,18 +205,33 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
                       autoComplete="off"
                     />
 
-                    {/* Action Icons */}
+                    {/* Action buttons row */}
                     <View style={styles.topActions}>
                       <View style={styles.leftIcons}>
-                        <TouchableOpacity style={styles.actionButton}>
-                          <CalendarIcon size={22} color="#aaaaaa" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionButton}>
-                          <Flag2Icon size={22} color="#aaaaaa" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionButton}>
-                          <MaterialIcons name="folder-open" size={22} color="#aaaaaa" />
-                        </TouchableOpacity>
+                        {/* Priority selection button */}
+                        <View style={styles.priorityContainer}>
+                          <TouchableOpacity 
+                            style={styles.actionButton}
+                            onPress={() => setShowPriorityDropdown(!showPriorityDropdown)}
+                          >
+                            <Flag2Icon 
+                              size={22} 
+                              color={getPriorityColor()} 
+                            />
+                          </TouchableOpacity>
+                        </View>
+                        
+                        {/* Folder selection button */}
+                        <View style={styles.folderContainer}>
+                          <TouchableOpacity 
+                            style={styles.actionButton}
+                            onPress={() => setShowFolderDropdown(!showFolderDropdown)}
+                          >
+                            <MaterialIcons name="folder-open" size={22} color="#aaaaaa" />
+                          </TouchableOpacity>
+                        </View>
+                        
+                        {/* Full-screen editor button */}
                         <TouchableOpacity 
                           style={styles.actionButton}
                           onPress={() => setShowDateRepeat(true)}
@@ -147,6 +239,8 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
                           <PanZoomIcon size={22} color="#aaaaaa" />
                         </TouchableOpacity>
                       </View>
+                      
+                      {/* Save button */}
                       <TouchableOpacity 
                         style={[styles.actionButton, styles.saveButton]}
                         onPress={handleSave}
@@ -155,7 +249,6 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
                       </TouchableOpacity>
                     </View>
                     
-                    {/* Bottom Spacer */}
                     <View style={styles.bottomSpacer} />
                   </View>
                 </ScrollView>
@@ -165,23 +258,56 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
         </Animated.View>
       </TouchableOpacity>
 
-      {/* Full Screen Task Editor */}
+      {/* Priority selection dropdown */}
+      <PriorityDropdown
+        visible={showPriorityDropdown}
+        selectedPriority={selectedPriority}
+        priorities={priorities}
+        onSelectPriority={setSelectedPriority}
+        onClose={() => setShowPriorityDropdown(false)}
+        style="modal"
+      />
+
+      {/* Folder selection dropdown */}
+      <FolderDropdown
+        visible={showFolderDropdown}
+        selectedFolder={selectedFolder}
+        folders={folders}
+        onSelectFolder={handleFolderSelection}
+        onClose={() => setShowFolderDropdown(false)}
+        style="modal"
+      />
+
+      {/* Move notification popup */}
+      {showMoveNotification && (
+        <View style={styles.moveNotificationOverlay}>
+          <View style={styles.moveNotification}>
+            <MaterialIcons name="folder" size={20} color="#FFFFFF" style={styles.moveNotificationIcon} />
+            <Text style={styles.moveNotificationText}>
+              Moved to {movedToFolder}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Full-screen task editor */}
       {showDateRepeat && (
         <FullScreenTaskEditor
           visible={showDateRepeat}
           onClose={() => {
             setShowDateRepeat(false);
-            // Reset states and close immediately
+            // Reset states and close modal completely
             setTitle('');
             setDescription('');
             slideAnim.setValue(0);
-            // Close the entire modal flow when exiting full screen
             onClose();
           }}
           initialTitle={title}
           initialDescription={description}
+          initialPriority={selectedPriority}
+          currentFolder={currentFolder}
           onSave={(newTitle: string, newDescription: string) => {
-            // This callback won't be used since FullScreenTaskEditor handles saving directly
+            // Close modal after saving from full-screen editor
             setShowDateRepeat(false);
             setTitle('');
             setDescription('');
@@ -242,7 +368,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   titleInput: {
-    fontSize: 15,
+    fontSize: 17,
     color: '#333333',
     paddingVertical: 4,
     paddingHorizontal: 0,
@@ -273,5 +399,39 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 10,
+  },
+  priorityContainer: {
+    position: 'relative',
+  },
+  folderContainer: {
+    position: 'relative',
+  },
+  moveNotificationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 60, // Distance from the top of the screen
+    pointerEvents: 'none', // Allow touches to pass through
+  },
+  moveNotification: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginHorizontal: 20,
+  },
+  moveNotificationIcon: {
+    marginRight: 8,
+  },
+  moveNotificationText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
   },
 }); 
