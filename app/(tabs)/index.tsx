@@ -2,8 +2,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Animated, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
-    Text,
-    useTheme
+  Text,
+  useTheme
 } from 'react-native-paper';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,11 +12,12 @@ import AddTaskModal from '../../components/AddTaskModal';
 
 export default function TodayScreen() {
   const theme = useTheme();
-  const { getTodayTasks, addTask } = useTask();
+  const { state, getTodayTasks, addTask, toggleTask, deleteTask } = useTask();
   const [showNotification, setShowNotification] = useState(true);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   
-  const todayTasks = getTodayTasks();
+  // Show all tasks, not just today's tasks for now
+  const allTasks = state.tasks;
 
   const handleAddTask = (title: string, description: string) => {
     addTask(title, description, new Date()); // Set to today for now
@@ -104,6 +105,37 @@ export default function TodayScreen() {
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.3,
       shadowRadius: 4,
+    },
+    tasksList: {
+      flex: 1,
+      paddingHorizontal: 16,
+      paddingTop: 8,
+    },
+    taskItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FFFFFF',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginBottom: 8,
+      borderRadius: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    taskCheckbox: {
+      marginRight: 12,
+    },
+    taskText: {
+      flex: 1,
+      fontSize: 16,
+      color: '#333333',
+    },
+    taskTextCompleted: {
+      textDecorationLine: 'line-through',
+      color: '#999999',
     },
   });
 
@@ -214,11 +246,33 @@ export default function TodayScreen() {
           )}
 
           {/* Main Content */}
-          <View style={styles.content}>
-            <EmptyStateIllustration />
-            <Text style={styles.emptyTitle}>No tasks</Text>
-            <Text style={styles.emptySubtitle}>Captures all your tasks and ideas</Text>
-          </View>
+          {allTasks.length === 0 ? (
+            <View style={styles.content}>
+              <EmptyStateIllustration />
+              <Text style={styles.emptyTitle}>No tasks</Text>
+              <Text style={styles.emptySubtitle}>Captures all your tasks and ideas</Text>
+            </View>
+          ) : (
+            <View style={styles.tasksList}>
+              {allTasks.map((task) => (
+                <View key={task.id} style={styles.taskItem}>
+                  <TouchableOpacity
+                    style={styles.taskCheckbox}
+                    onPress={() => toggleTask(task.id)}
+                  >
+                    <MaterialIcons
+                      name={task.completed ? "check-box" : "check-box-outline-blank"}
+                      size={20}
+                      color={task.completed ? "#4772fa" : "#cccccc"}
+                    />
+                  </TouchableOpacity>
+                  <Text style={[styles.taskText, task.completed && styles.taskTextCompleted]}>
+                    {task.title}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </ScrollView>
 
         {/* Custom FAB with hover effect */}

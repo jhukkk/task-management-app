@@ -1,15 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import CalendarIcon from './CalendarIcon';
 import Flag2Icon from './Flag2Icon';
@@ -26,6 +27,25 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [showDateRepeat, setShowDateRepeat] = useState(false);
+  const [slideAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    if (visible) {
+      // Slide up animation when modal opens
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      // Reset animation and all states when modal closes
+      slideAnim.setValue(0);
+      setShowDateRepeat(false);
+      setTitle('');
+      setDescription('');
+    }
+  }, [visible]);
 
   const handleSave = () => {
     if (title.trim()) {
@@ -37,20 +57,33 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
   };
 
   const handleClose = () => {
-    // Auto-save if there's content
-    if (title.trim()) {
-      onSave(title.trim(), description.trim());
-    }
-    setTitle('');
-    setDescription('');
-    onClose();
+    // Slide down animation before closing
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      // Auto-save if there's content
+      if (title.trim()) {
+        onSave(title.trim(), description.trim());
+      }
+      setTitle('');
+      setDescription('');
+      onClose();
+    });
   };
+
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [500, 0], // Start 500px below, slide to 0
+  });
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
+      key={visible ? 'modal-open' : 'modal-closed'}
     >
       {/* Dark overlay */}
       <TouchableOpacity 
@@ -58,84 +91,105 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
         activeOpacity={1} 
         onPress={handleClose}
       >
-        <View style={styles.bottomSheet}>
-                    <SafeAreaView style={styles.container}>
-            <KeyboardAvoidingView 
-              style={styles.container} 
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-              <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContainer}>
-                {/* Content */}
-                <View style={styles.content}>
-                  {/* Task Title Input */}
-                  <TextInput
-                    style={styles.titleInput}
-                    placeholder="Make figma design for project"
-                    value={title}
-                    onChangeText={setTitle}
-                    multiline
-                    autoFocus
-                    placeholderTextColor="#A0A0A0"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    autoComplete="off"
-                  />
+        <Animated.View style={[styles.bottomSheet, { transform: [{ translateY }] }]}>
+          <TouchableOpacity style={styles.bottomSheetContainer} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+            <SafeAreaView style={styles.container}>
+              <KeyboardAvoidingView 
+                style={styles.container} 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              >
+                <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+                  {/* Content */}
+                  <View style={styles.content}>
+                    {/* Task Title Input */}
+                    <TextInput
+                      style={styles.titleInput}
+                      placeholder="Make figma design for project"
+                      value={title}
+                      onChangeText={setTitle}
+                      multiline
+                      autoFocus
+                      placeholderTextColor="#A0A0A0"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
 
-                  {/* Description Input */}
-                  <TextInput
-                    style={styles.descriptionInput}
-                    placeholder="Description"
-                    value={description}
-                    onChangeText={setDescription}
-                    multiline
-                    placeholderTextColor="#A0A0A0"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    autoComplete="off"
-                  />
+                    {/* Description Input */}
+                    <TextInput
+                      style={styles.descriptionInput}
+                      placeholder="Description"
+                      value={description}
+                      onChangeText={setDescription}
+                      multiline
+                      placeholderTextColor="#a6a6a6"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
 
-                  {/* Action Icons */}
-                  <View style={styles.topActions}>
-                    <View style={styles.leftIcons}>
-                      <TouchableOpacity style={styles.actionButton}>
-                        <CalendarIcon size={22} color="#aaaaaa" />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionButton}>
-                        <Flag2Icon size={22} color="#aaaaaa" />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionButton}>
-                        <MaterialIcons name="folder-open" size={22} color="#aaaaaa" />
+                    {/* Action Icons */}
+                    <View style={styles.topActions}>
+                      <View style={styles.leftIcons}>
+                        <TouchableOpacity style={styles.actionButton}>
+                          <CalendarIcon size={22} color="#aaaaaa" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionButton}>
+                          <Flag2Icon size={22} color="#aaaaaa" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionButton}>
+                          <MaterialIcons name="folder-open" size={22} color="#aaaaaa" />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.actionButton}
+                          onPress={() => setShowDateRepeat(true)}
+                        >
+                          <PanZoomIcon size={22} color="#aaaaaa" />
+                        </TouchableOpacity>
+                      </View>
+                      <TouchableOpacity 
+                        style={[styles.actionButton, styles.saveButton]}
+                        onPress={handleSave}
+                      >
+                        <MaterialIcons name="arrow-upward" size={18} color="#FFFFFF" />
                       </TouchableOpacity>
                     </View>
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => setShowDateRepeat(true)}
-                    >
-                      <PanZoomIcon size={22} color="#aaaaaa" />
-                    </TouchableOpacity>
+                    
+                    {/* Bottom Spacer */}
+                    <View style={styles.bottomSpacer} />
                   </View>
-                  
-                  {/* Bottom Spacer */}
-                  <View style={styles.bottomSpacer} />
-                </View>
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </View>
+                </ScrollView>
+              </KeyboardAvoidingView>
+            </SafeAreaView>
+          </TouchableOpacity>
+        </Animated.View>
       </TouchableOpacity>
 
       {/* Full Screen Task Editor */}
-      <FullScreenTaskEditor
-        visible={showDateRepeat}
-        onClose={() => setShowDateRepeat(false)}
-        initialTitle={title}
-        initialDescription={description}
-        onSave={(newTitle: string, newDescription: string) => {
-          setTitle(newTitle);
-          setDescription(newDescription);
-          setShowDateRepeat(false);
-        }}
-      />
+      {showDateRepeat && (
+        <FullScreenTaskEditor
+          visible={showDateRepeat}
+          onClose={() => {
+            setShowDateRepeat(false);
+            // Reset states and close immediately
+            setTitle('');
+            setDescription('');
+            slideAnim.setValue(0);
+            // Close the entire modal flow when exiting full screen
+            onClose();
+          }}
+          initialTitle={title}
+          initialDescription={description}
+          onSave={(newTitle: string, newDescription: string) => {
+            // This callback won't be used since FullScreenTaskEditor handles saving directly
+            setShowDateRepeat(false);
+            setTitle('');
+            setDescription('');
+            slideAnim.setValue(0);
+            onClose();
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -147,10 +201,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bottomSheet: {
-    height: '52%',
+    height: '49%',
     backgroundColor: 'transparent',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopRightRadius: 12,
+  },
+  bottomSheetContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   container: {
     flex: 1,
@@ -168,7 +225,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 8,
     flex: 1,
   },
   topActions: {
@@ -186,7 +243,7 @@ const styles = StyleSheet.create({
   },
   titleInput: {
     fontSize: 15,
-    color: '#a6a6a6',
+    color: '#333333',
     paddingVertical: 4,
     paddingHorizontal: 0,
     marginBottom: 0,
@@ -194,7 +251,7 @@ const styles = StyleSheet.create({
   },
   descriptionInput: {
     fontSize: 13.5,
-    color: '#f0f0f0',
+    color: '#333333',
     paddingVertical: 2,
     paddingHorizontal: 0,
     minHeight: 40,
@@ -203,6 +260,16 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 12,
     marginRight: 2,
+  },
+  saveButton: {
+    backgroundColor: '#4772fa',
+    borderRadius: 18,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 0,
+    marginRight: 0,
   },
   bottomSpacer: {
     height: 10,
